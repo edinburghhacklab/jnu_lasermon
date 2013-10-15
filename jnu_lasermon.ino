@@ -24,9 +24,6 @@ DallasTemperature sensors(&oneWire);
 DeviceAddress sensor0;
 DeviceAddress sensor1;
 DeviceAddress sensor2;
-float temp0;
-float temp1;
-float temp2;
 
 volatile uint8_t portahistory;
 
@@ -35,7 +32,7 @@ volatile unsigned long laser_session_time = 0; // time spent active (including t
 volatile unsigned long laser_cutting_time = 0; // time spent cutting (excluding time between cuts) 
 volatile unsigned long laser_analog_time = 0;  // time spent cutting, adjusted according to power level
 
-volatile unsigned long last_tx = 0;
+volatile unsigned long next_tx = 500; // set first transmission into the future to allow the laser cutter to settle
 volatile unsigned long last_interrupt_time;
 volatile boolean last_interrupt_state;
 //volatile unsigned int laser_level;
@@ -77,11 +74,6 @@ void setup() {
   // configure ADC to use internal reference
   //ADMUX |= (1 << REFS1);
 
-  // configure interrupts
-  GIMSK  |= (1 << PCIE0);     // set PCIE0 to enable PCMSK0 scan
-  PCMSK0 |= (1 << PCINT7);   // set PCINT7 to trigger an interrupt on state change 
-  sei();                    // turn on interrupts
-
   // initialize the temperature sensor
   //int sensorCount = 0;
   sensors.begin();
@@ -99,10 +91,12 @@ void setup() {
   //sensors.requestTemperaturesByAddress(sensor1);
   //sensors.requestTemperaturesByAddress(sensor2);
   //Sleepy::loseSomeTime(3000);
-  
-  // do the initial transmit so the receiver can see that we've started up
-  transmit();
-  
+
+  // configure interrupts
+  GIMSK  |= (1 << PCIE0);     // set PCIE0 to enable PCMSK0 scan
+  PCMSK0 |= (1 << PCINT7);   // set PCINT7 to trigger an interrupt on state change 
+  sei();                    // turn on interrupts
+
 }
 
 void readTemperatures() {
@@ -117,7 +111,7 @@ void readTemperatures() {
 void transmit() {
   int i;
 
-  last_tx = millis();
+  next_tx = millis()+interval;
 
   // update the laser stats packet
   laser_packet.power_time = millis()/1000;
@@ -163,7 +157,7 @@ void loop() {
   
   laser_packet.laser_level = analogRead(laser_analog_pin);
   
-  if (millis() > last_tx+interval) {
+  if (millis() >= next_tx) {
     transmit();
   }
 
